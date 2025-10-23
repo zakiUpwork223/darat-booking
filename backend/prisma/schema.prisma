@@ -1,0 +1,507 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Admin {
+  id            String   @id @default(uuid())
+  profilePic    String   @default("dummy")
+  name          String
+  email         String   @unique
+  contactNumber String?  @unique
+  password      String
+  role          String   @default("Admin")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  is_emailVerified         Boolean @default(false)
+  is_contactNumberVerified Boolean @default(false)
+
+  is_Active  Boolean @default(true)
+  is_Deleted Boolean @default(false)
+
+  @@map(name: "admin")
+}
+
+model Patient {
+  id             String   @id @default(uuid())
+  profilePic     String   @default("dummy")
+  name           String
+  email          String   @unique
+  contactNumber  String?  @unique //made optional after UI
+  password       String
+  medicalHistory String[]
+  role           String   @default("Patient")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  favoriteItems  favorite_items[]
+
+  is_emailVerified         Boolean @default(false)
+  is_contactNumberVerified Boolean @default(false)
+
+  loyaltyType LoyaltyType?
+
+  appointment Appointment[]
+
+  is_Active       Boolean         @default(true)
+  is_Deleted      Boolean         @default(false)
+  PaymentCustomer StripeCustomer?
+  loyaltyPoints   Loyalty?
+  Notification    Notification[]
+  LoyaltyPackage  LoyaltyPackage?
+
+  orders              orders[]
+  stripe_customer_key String?
+  avatar              String?
+  dateOfBirth         DateTime?
+  address             customer_address[]
+  cart                cart?
+
+  @@map(name: "patient")
+}
+
+model Doctor {
+  id              String  @id @default(uuid())
+  profilePic      String  @default("dummy")
+  name            String
+  email           String  @unique
+  contactNumber   String? @unique
+  password        String
+  role            String  @default("Doctor")
+  degreeName      String
+  degreeInstitute String
+  specializationId String?
+  specialization  Service? @relation(fields: [specializationId], references: [id], onDelete: Cascade)  
+  totalExperience Float
+  doctorFee       Int     @default(0)
+
+  patientReviews Int @default(0)
+  reviewCount    Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  is_emailVerified         Boolean @default(true)
+  is_contactNumberVerified Boolean @default(false)
+
+  is_Active  Boolean @default(true)
+  is_Deleted Boolean @default(false)
+
+  schedule    DoctorSchedule[]
+  appointment Appointment[]
+
+  //number of patients attended
+  //doctor rating
+  //doctor rating count
+  //PaymentCustomer PaymentCustomer[]
+
+  @@map(name: "doctor")
+}
+
+model Service {
+  id          String   @id @default(uuid())
+  subService  String?
+  picture     String?
+  name        String   @unique
+  description String
+  serviceFee  Int      @default(0)
+  discount    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  Doctors     Doctor[]
+  schedule    DoctorSchedule[]
+  appointment Appointment[]
+
+  is_Active  Boolean @default(true)
+  is_Deleted Boolean @default(false)
+
+  @@map(name: "service")
+}
+
+model VerifyUser {
+  id                String   @id @default(uuid())
+  username          String   @unique
+  otp               String
+  usernameType      String
+  type              Role
+  verificationTries Int      @default(0)
+  //duration     DateTime
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  is_Active  Boolean @default(true)
+  is_Deleted Boolean @default(false)
+
+  @@map(name: "verifyUser")
+}
+
+model DoctorSchedule {
+  id           String    @id @default(uuid())
+  doctorId     Doctor    @relation(fields: [doctor], references: [id], onDelete: Cascade)
+  doctor       String
+  serviceId    Service   @relation(fields: [service], references: [id], onDelete: Cascade)
+  service      String
+  weekday      Weekdays?
+  scheduleDate DateTime // make it not null in next db push
+  startTime    DateTime
+  endTime      DateTime
+  slotDuration Int
+  slotNumber   Int       @default(0)
+  //slotCategory String
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  is_Active  Boolean @default(true)
+  is_Deleted Boolean @default(false)
+
+  @@map(name: "doctorSchedule")
+}
+
+model Appointment {
+  id            String   @id @default(uuid())
+  patientId     Patient  @relation(fields: [patient], references: [id], onDelete: Cascade)
+  patient       String
+  doctorId      Doctor   @relation(fields: [doctor], references: [id], onDelete: Cascade)
+  doctor        String
+  serviceId     Service  @relation(fields: [service], references: [id], onDelete: Cascade)
+  service       String
+  scheduledDate String // date choosen by patient
+  startTime     DateTime // appointment start time
+  endTime       DateTime // appointment end time
+  weekday       String
+  status        Status // rescheduled case!!
+
+  //stripeIntentId String  // for toring the intent id for each appointment
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  is_Active  Boolean @default(true)
+  is_Deleted Boolean @default(false)
+
+  notification     Notification?
+  customerPayments CustomerPaymentsRecord?
+  review           AppointmentReviews?
+
+  @@unique(fields: [patient, doctor, service, startTime], name: "booking")
+  @@map(name: "appointment")
+}
+
+model StripeCustomer {
+  id              String   @id @default(uuid())
+  patientId       Patient  @relation(fields: [patient], references: [id], onDelete: Cascade)
+  patient         String   @unique
+  stripeCutomerId String   @unique
+  createdAt       DateTime @default(now())
+
+  customerPayments CustomerPaymentsRecord[]
+
+  @@map(name: "stripeCustomer")
+}
+
+model CustomerPaymentsRecord {
+  id               String         @id @default(uuid())
+  appointmentId    Appointment?   @relation(fields: [appointment], references: [id], onDelete: Cascade)
+  appointment      String?        @unique
+  //orderId Order // ecommerce part
+  //order String
+  stripeCustomerId StripeCustomer @relation(fields: [stripeCustomer], references: [id], onDelete: Cascade)
+  stripeCustomer   String
+  client_secret    String         @unique
+  paymentAmount    Int
+  type             InvoiceType
+
+  @@map(name: "customerPaymentsRecord")
+}
+
+model AppointmentReviews {
+  id            String      @id @default(uuid())
+  appointmentId Appointment @relation(fields: [appointment], references: [id], onDelete: Cascade)
+  appointment   String      @unique
+  review        Int         @default(0)
+  createdAt     DateTime    @default(now())
+
+  @@map(name: "appointmentReviews")
+}
+
+model Loyalty {
+  id        String   @id @default(uuid())
+  patientId Patient  @relation(fields: [patient], references: [id], onDelete: Cascade)
+  patient   String   @unique
+  points    Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@map(name: "loyalty")
+}
+
+model LoyaltyPackage {
+  id              String      @id @default(uuid())
+  patientId       Patient     @relation(fields: [patient], references: [id], onDelete: Cascade)
+  patient         String      @unique
+  loyaltyType     LoyaltyType
+  birthday        Json
+  freeGift        Json
+  consultation    Int
+  serviceDiscount Int?
+  freeServices    Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map(name: "loyaltyPackage")
+}
+
+model Notification {
+  id            String      @id @default(uuid())
+  patientId     Patient     @relation(fields: [patient], references: [id], onDelete: Cascade)
+  patient       String
+  read          Boolean     @default(false)
+  appointmentId Appointment @relation(fields: [appointment], references: [id], onDelete: Cascade)
+  appointment   String      @unique
+  notificationContent String
+  createdAt     DateTime    @default(now())
+
+  @@map(name: "notification")
+}
+
+enum Role {
+  SuperAdmin
+  Admin
+  Doctor
+  Patient
+}
+
+enum Weekdays {
+  Monday
+  Tuesday
+  Wednesday
+  Thursday
+  Friday
+  Saturday
+  Sunday
+}
+
+enum Status {
+  Booked
+  Confirmed
+  Cancelled
+  Completed
+  Rescheduled
+}
+
+enum InvoiceType {
+  ecomm
+  booking
+}
+
+enum LoyaltyType {
+  Silver
+  Gold
+  Platinum
+}
+
+model categories {
+  id          String                @id @default(uuid())
+  name        String
+  unique_code String
+  active      Boolean               @default(true)
+  attachment  String
+  description String?
+  items       items[]
+  discounts   discount_categories[]
+  created_at  DateTime              @default(now())
+  updated_at  DateTime              @default(now())
+  deleted_at  Boolean               @default(false)
+}
+
+model items {
+  id          String           @id @default(uuid())
+  name        String
+  unique_code String
+  active      Boolean          @default(true)
+  attachment  String
+  description String?
+  categoryId  String
+  category_id categories       @relation(fields: [categoryId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  variantId   item_variants[]
+  
+  
+  created_at  DateTime         @default(now())
+  updated_at  DateTime         @default(now())
+  deleted_at  Boolean          @default(false)
+  discounts   discount_items[]
+}
+
+model item_variants {
+  id          String        @id @default(uuid())
+  size        String
+  price       Int
+  stock       Int
+  unique_code String
+  active      Boolean       @default(true)
+  itemId      String
+  item_id     items         @relation(fields: [itemId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  order_items order_items[]
+  favoriteItemId favorite_items[]
+  colorId     item_colors[]
+  cartItems   cart_items[]
+  created_at  DateTime      @default(now())
+  updated_at  DateTime      @default(now())
+  deleted_at  Boolean       @default(false)
+}
+
+model favorite_items {
+  id           String         @id @default(uuid())
+  variantId    String
+  variant_id   item_variants  @relation(fields: [variantId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  customerId   String
+  customer_id  Patient        @relation(fields: [customerId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  created_at   DateTime       @default(now())
+  updated_at   DateTime       @default(now())
+  deleted_at   Boolean        @default(false)
+}
+
+model item_colors {
+  id              String        @id @default(uuid())
+  color           String        @default("COLOR")
+  type            String
+  unique_code     String
+  order_items     order_items[]
+  active          Boolean       @default(true)
+  itemVariantId   String
+  item_variant_id item_variants @relation(fields: [itemVariantId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  created_at      DateTime      @default(now())
+  updated_at      DateTime      @default(now())
+  deleted_at      Boolean       @default(false)
+}
+
+model discounts {
+  id          String                @id @default(uuid())
+  type        String                @default("VALUE")
+  level       String                @default("ITEM")
+  unique_code String
+  value       String
+  expiryDate  DateTime
+  active      Boolean               @default(true)
+  categories  discount_categories[]
+  items       discount_items[]
+  created_at  DateTime              @default(now())
+  updated_at  DateTime              @default(now())
+  deleted_at  Boolean               @default(false)
+}
+
+model discount_categories {
+  id         String     @id @default(uuid())
+  categoryId String
+  discountId String
+  category   categories @relation(fields: [categoryId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  discount   discounts  @relation(fields: [discountId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  created_at DateTime   @default(now())
+  updated_at DateTime   @default(now())
+  deleted_at Boolean    @default(false)
+}
+
+model discount_items {
+  id         String    @id @default(uuid())
+  itemId     String
+  discountId String
+  item       items     @relation(fields: [itemId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  discount   discounts @relation(fields: [discountId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  created_at DateTime  @default(now())
+  updated_at DateTime  @default(now())
+  deleted_at Boolean   @default(false)
+}
+
+// model customers {
+//   id                  String             @id @default(uuid())
+//   name                String
+//   phone               String
+//   password            String
+//   email               String?
+//   orders              orders[]
+//   stripe_customer_key String?
+//   avatar              String?
+//   dateOfBirth         DateTime?
+//   address             customer_address[]
+//   cartId              Int?
+//   cart                cart?
+//   created_at          DateTime           @default(now())
+//   updated_at          DateTime           @updatedAt
+//   deleted_at          Boolean            @default(false)
+// }
+
+model customer_address {
+  id         String   @id @default(uuid())
+  lat        String
+  lng        String
+  address    String
+  customer   Patient  @relation(fields: [customerId], references: [id])
+  customerId String
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+  deleted_at Boolean  @default(false)
+}
+
+model cart_items {
+  id          String        @id @default(uuid())
+  unique_code String
+  variant     item_variants @relation(fields: [variantId], references: [id])
+  variantId   String
+  cart        cart          @relation(fields: [cartId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  cartId      String
+  quantity    Int
+  created_at  DateTime      @default(now())
+  updated_at  DateTime      @updatedAt
+  deleted_at  Boolean       @default(false)
+}
+
+model cart {
+  id          String       @id @default(uuid())
+  unique_code String
+  customerId  String       @unique
+  Customer    Patient      @relation(fields: [customerId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  cartItems   cart_items[]
+  created_at  DateTime     @default(now())
+  updated_at  DateTime     @updatedAt
+  deleted_at  Boolean      @default(false)
+}
+
+model orders {
+  id              String        @id @default(uuid())
+  unique_code     String
+  customerId      String
+  customer_id     Patient       @relation(fields: [customerId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  notes           String?
+  price           Int
+  totalPrice      Int
+  totalDiscount   Int?
+  status          String        @default("PENDING")
+  payment_method  String        @default("CARD")
+  paymentIntentId String?
+  refundId        String?
+  orderItems      order_items[]
+  created_at      DateTime      @default(now())
+  updated_at      DateTime      @updatedAt
+  deleted_at      Boolean       @default(false)
+}
+
+model order_items {
+  id         String        @id @default(uuid())
+  variantId  String
+  colorId    String?
+  orderId    String
+  variant_id item_variants @relation(fields: [variantId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  color_id   item_colors?  @relation(fields: [colorId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  order_id   orders        @relation(fields: [orderId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  price      Int
+  discount   Int?
+  created_at DateTime      @default(now())
+  updated_at DateTime      @updatedAt
+  deleted_at Boolean       @default(false)
+}
